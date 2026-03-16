@@ -1,0 +1,7 @@
+{
+  "name": "WABA Dashboard",
+  "description": "A smart water billing system dashboard for monitoring key performance indicators, revenue, and customer accounts. This provides an administrative overview of the WABA system.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
