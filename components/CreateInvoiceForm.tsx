@@ -38,7 +38,7 @@ const CreateInvoiceForm: React.FC<CreateInvoiceFormProps> = ({ customers, onSave
                 customerId: customer?.id || '',
                 issueDate: invoiceToEdit.issueDate,
                 dueDate: invoiceToEdit.dueDate,
-                items: invoiceToEdit.items.map(item => ({
+                items: (invoiceToEdit.items || []).map(item => ({
                     description: item.description,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,

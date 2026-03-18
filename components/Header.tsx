@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ZapIcon, MenuIcon, BellIcon, MicIcon, LogOutIcon } from './icons';
 import { Button } from './ui/Button';
 import DarkModeSwitcher from './DarkModeSwitcher';
 import LiveAssistant from './LiveAssistant';
 import BulkBillingWizard from './BulkBillingWizard';
+import { fetchFromApi } from '../lib/api';
 
 interface HeaderProps {
   showToast: (message: string, type?: 'success' | 'error') => void;
@@ -14,11 +15,31 @@ interface HeaderProps {
   isDarkMode: boolean;
   setIsDarkMode: (isDark: boolean) => void;
   onLogout: () => void;
+  onNavigate: (view: string) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ showToast, activeView, sidebarOpen, setSidebarOpen, isDarkMode, setIsDarkMode, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ showToast, activeView, sidebarOpen, setSidebarOpen, isDarkMode, setIsDarkMode, onLogout, onNavigate }) => {
   const [isBulkBillingOpen, setIsBulkBillingOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const data = await fetchFromApi('notifications');
+        if (data && data.unreadCount !== undefined) {
+          setUnreadCount(data.unreadCount);
+        }
+      } catch (error) {
+        console.error('Failed to fetch unread notifications count', error);
+      }
+    };
+    
+    fetchUnreadCount();
+    // Poll every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     onLogout();
@@ -66,9 +87,17 @@ const Header: React.FC<HeaderProps> = ({ showToast, activeView, sidebarOpen, set
               <MicIcon className="h-6 w-6 text-slate-600 dark:text-slate-300 hover:text-primary" />
             </button>
 
-            <button className="relative" title="Notifications">
+            <button 
+              onClick={() => onNavigate('Notifications')}
+              className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800" 
+              title="Notifications"
+            >
               <BellIcon className="h-6 w-6 text-slate-600 dark:text-slate-300 hover:text-primary" />
-              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500"></span>
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
             
             <div className="flex items-center gap-4">

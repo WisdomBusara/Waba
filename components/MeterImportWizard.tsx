@@ -33,7 +33,7 @@ const MeterImportWizard: React.FC<MeterImportWizardProps> = ({ onComplete, onCan
     const parseCSV = useCallback((csvText: string) => {
         const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length < 2) {
-            alert("CSV file must have a header row and at least one data row.");
+            showToast("CSV file must have a header row and at least one data row.", 'error');
             return;
         }
         const csvHeaders = lines[0].split(',').map(h => h.trim());

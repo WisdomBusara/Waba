@@ -101,6 +101,32 @@ export function initializeDatabase() {
             lastActive TEXT,
             status TEXT DEFAULT 'Active'
         );
+
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            actorId TEXT NOT NULL,
+            actionType TEXT NOT NULL,
+            entityType TEXT NOT NULL,
+            entityId TEXT,
+            ipAddress TEXT,
+            details TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS notification_settings (
+            userId TEXT PRIMARY KEY,
+            highConsumptionThreshold REAL DEFAULT 1000,
+            emailAlerts BOOLEAN DEFAULT 1,
+            pushAlerts BOOLEAN DEFAULT 0,
+            FOREIGN KEY (userId) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS pdf_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            logoUrl TEXT,
+            themeColor TEXT DEFAULT '#3b82f6',
+            footerText TEXT DEFAULT 'Thank you for your business. Account: {ACCOUNT_NUMBER}'
+        );
     `;
 
     db.exec(schema);

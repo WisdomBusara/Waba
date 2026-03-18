@@ -12,11 +12,13 @@
   "dependencies": {
     "@google/genai": "^1.44.0",
     "@react-pdf/renderer": "^4.3.2",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "firebase": "^12.10.0",
     "framer-motion": "^11.2.12",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -24,9 +26,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.14.0",
     "@types/pg": "^8.18.0",
     "@vitejs/plugin-react": "^5.0.0",

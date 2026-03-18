@@ -65,7 +65,10 @@ const BillingCycleCard: React.FC<BillingCycleCardProps> = ({ settings, onSave, s
         }
     };
 
-    const dayOptions = Array.from({ length: 28 }, (_, i) => i + 1);
+    const dayOptions = Array.from(
+        { length: formState.frequency === 'bi-monthly' ? 14 : 28 }, 
+        (_, i) => i + 1
+    );
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg">
@@ -115,8 +118,14 @@ const BillingCycleCard: React.FC<BillingCycleCardProps> = ({ settings, onSave, s
                     </div>
                 </div>
                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-                    <label htmlFor="readingCutoffDays" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Reading Cut-off <span className="text-xs text-gray-400">(days before)</span>
+                    <label htmlFor="readingCutoffDays" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                        Reading Cut-off
+                        <span className="group relative flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs cursor-help">
+                            ?
+                            <span className="absolute bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                                Days before invoice generation to finalize readings
+                            </span>
+                        </span>
                     </label>
                     <div className="sm:col-span-2">
                          <input

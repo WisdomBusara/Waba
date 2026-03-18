@@ -191,7 +191,7 @@ const BillTemplate: React.FC<BillTemplateProps> = ({ invoice, settings = DEFAULT
               <Text style={[styles.tableHeaderCell, styles.unitPriceCell]}>Unit Price</Text>
               <Text style={[styles.tableHeaderCell, styles.totalCell]}>Total (KES)</Text>
             </View>
-            {invoice.items.map((item, index) => (
+            {(invoice.items || []).map((item, index) => (
                 <View key={index} style={styles.tableRow}>
                     <Text style={[styles.tableCell, styles.descriptionCell]}>{item.description}</Text>
                     <Text style={[styles.tableCell, styles.quantityCell]}>{item.quantity.toFixed(2)}</Text>

@@ -99,7 +99,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ customerId, onBack, s
         // Extract usage from invoice items
         return data.history.invoices
             .map(inv => {
-                const waterItem = inv.items.find(item => item.description.toLowerCase().includes('water'));
+                const waterItem = (inv.items || []).find(item => item.description.toLowerCase().includes('water'));
                 return {
                     month: inv.issueDate.substring(0, 7), // YYYY-MM
                     usage: waterItem ? waterItem.quantity : 0,

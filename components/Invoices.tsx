@@ -12,6 +12,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/Card';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
+import ConfirmModal from './ui/ConfirmModal';
 
 interface InvoicesProps {
     showToast: (message: string, type?: 'success' | 'error') => void;
@@ -34,6 +35,7 @@ const Invoices: React.FC<InvoicesProps> = ({ showToast }) => {
     const [isBulkBilling, setIsBulkBilling] = useState(false);
     const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
     const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+    const [invoiceToMarkPaid, setInvoiceToMarkPaid] = useState<Invoice | null>(null);
     const [filterText, setFilterText] = useState('');
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'issueDate', direction: 'descending' });
     const [currentPage, setCurrentPage] = useState(1);
@@ -114,24 +116,42 @@ const Invoices: React.FC<InvoicesProps> = ({ showToast }) => {
         setEditingInvoice(invoice);
     };
 
-    const handleMarkAsPaid = async (invoice: Invoice) => {
-        if (window.confirm(`Are you sure you want to mark invoice ${invoice.id} as paid for ${invoice.total.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })}?`)) {
-            try {
-                await fetchFromApi(`invoices/${invoice.id}/pay`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ method: 'Manual' }),
-                });
-                showToast(`Invoice ${invoice.id} marked as paid.`, 'success');
-                setViewingInvoice(null);
-                fetchInvoices();
-            } catch (err: unknown) {
-                const message = err instanceof Error ? err.message : 'Failed to mark invoice as paid.';
-                showToast(message, 'error');
-            }
+    const handleMarkAsPaid = async () => {
+        if (!invoiceToMarkPaid) return;
+        try {
+            await fetchFromApi(`invoices/${invoiceToMarkPaid.id}/pay`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ method: 'Manual' }),
+            });
+            showToast(`Invoice ${invoiceToMarkPaid.id} marked as paid.`, 'success');
+            setViewingInvoice(null);
+            fetchInvoices();
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to mark invoice as paid.';
+            showToast(message, 'error');
+        } finally {
+            setInvoiceToMarkPaid(null);
         }
     };
     
+    const handleViewInvoice = async (invoice: Invoice) => {
+        try {
+            const data = await fetchFromApi(`invoices/${invoice.id}`);
+            if (data && data.invoice) {
+                setViewingInvoice({
+                    ...data.invoice,
+                    items: data.items || []
+                });
+            } else {
+                setViewingInvoice(invoice);
+            }
+        } catch (err) {
+            console.error("Failed to fetch full invoice details", err);
+            setViewingInvoice(invoice); // Fallback to partial invoice
+        }
+    };
+
     const handleSort = (key: keyof Invoice) => {
         let direction: 'ascending' | 'descending' = 'ascending';
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -198,7 +218,7 @@ const Invoices: React.FC<InvoicesProps> = ({ showToast }) => {
                         <>
                             <InvoiceTable
                                 invoices={invoices}
-                                onViewInvoice={setViewingInvoice}
+                                onViewInvoice={handleViewInvoice}
                                 onSort={handleSort}
                                 sortConfig={sortConfig}
                                 onCreateInvoice={() => setIsCreatingInvoice(true)}
@@ -244,7 +264,17 @@ const Invoices: React.FC<InvoicesProps> = ({ showToast }) => {
                     invoice={viewingInvoice} 
                     onClose={() => setViewingInvoice(null)}
                     onEdit={handleEditInvoice}
-                    onMarkAsPaid={handleMarkAsPaid}
+                    onMarkAsPaid={setInvoiceToMarkPaid}
+                />
+            )}
+
+            {invoiceToMarkPaid && (
+                <ConfirmModal
+                    title="Mark Invoice as Paid"
+                    message={`Are you sure you want to mark invoice ${invoiceToMarkPaid.id} as paid for ${invoiceToMarkPaid.total.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })}?`}
+                    onConfirm={handleMarkAsPaid}
+                    onCancel={() => setInvoiceToMarkPaid(null)}
+                    confirmText="Mark as Paid"
                 />
             )}
         </div>

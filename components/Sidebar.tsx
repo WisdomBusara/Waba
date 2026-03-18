@@ -50,13 +50,13 @@ const NavGroup = ({ group, activeView, setActiveView, setSidebarOpen, sidebarExp
                 {sidebarExpanded && <ChevronDownIcon className={`w-4 h-4 text-slate-400 transition-transform ${isOpen && 'rotate-180'}`} />}
             </button>
             {sidebarExpanded && isOpen && (
-                <div className="mt-2 ml-6 space-y-1 border-l border-slate-700 pl-4">
+                <ul className="mt-2 ml-6 space-y-1 border-l border-slate-700 pl-4">
                     {group.items.map((item: any) => (
                         <li key={item.label}>
                            <NavLink item={item} activeView={activeView} setActiveView={setActiveView} setSidebarOpen={setSidebarOpen} sidebarExpanded={sidebarExpanded} />
                         </li>
                     ))}
-                </div>
+                </ul>
             )}
         </div>
     );
@@ -77,6 +77,20 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen, activeVi
     document.addEventListener('click', clickHandler);
     return () => document.removeEventListener('click', clickHandler);
   });
+
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setUserRole(user.role);
+      } catch (e) {
+        console.error('Failed to parse user from local storage');
+      }
+    }
+  }, []);
 
   const navItems = [
     {
@@ -104,7 +118,8 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen, activeVi
     {
         title: 'SYSTEM',
         links: [
-             { icon: UserIcon, label: 'Users' },
+             ...(userRole === 'Admin' ? [{ icon: UserIcon, label: 'Users' }] : []),
+             ...(userRole === 'Admin' ? [{ icon: FileTextIcon, label: 'Audit Logs' }] : []),
              { icon: SettingsIcon, label: 'Settings' },
         ]
     }

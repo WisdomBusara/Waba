@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { PDFViewer } from '@react-pdf/renderer';
 import { PdfSettings, Invoice } from '../types';
-import { getPdfSettings, savePdfSettings, DEFAULT_PDF_SETTINGS } from '../lib/pdfSettings';
+import { DEFAULT_PDF_SETTINGS } from '../lib/pdfSettings';
 import { SaveIcon, XIcon } from './icons';
 import BillTemplate from './pdf/BillTemplate';
+import { fetchFromApi } from '../lib/api';
 
 interface PdfCustomizationCardProps {
     showToast: (message: string, type?: 'success' | 'error') => void;
@@ -31,13 +32,27 @@ const SAMPLE_INVOICE: Invoice = {
 
 
 const PdfCustomizationCard: React.FC<PdfCustomizationCardProps> = ({ showToast }) => {
-    const [settings, setSettings] = useState<PdfSettings>(getPdfSettings);
+    const [settings, setSettings] = useState<PdfSettings>(DEFAULT_PDF_SETTINGS);
     const [isDirty, setIsDirty] = useState(false);
     const [isClient, setIsClient] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         setIsClient(true);
-    }, []);
+        const loadSettings = async () => {
+            try {
+                const data = await fetchFromApi('pdf-settings');
+                if (data) {
+                    setSettings({ ...DEFAULT_PDF_SETTINGS, ...data });
+                }
+            } catch (err) {
+                showToast('Failed to load PDF settings.', 'error');
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadSettings();
+    }, [showToast]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -60,16 +75,33 @@ const PdfCustomizationCard: React.FC<PdfCustomizationCardProps> = ({ showToast }
         setIsDirty(true);
     };
 
-    const handleSave = () => {
-        savePdfSettings(settings);
-        showToast('PDF settings saved successfully!', 'success');
-        setIsDirty(false);
+    const handleSave = async () => {
+        try {
+            await fetchFromApi('pdf-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings),
+            });
+            showToast('PDF settings saved successfully!', 'success');
+            setIsDirty(false);
+        } catch (err: any) {
+            showToast(err.message || 'Failed to save PDF settings.', 'error');
+        }
     };
 
     const handleReset = () => {
         setSettings(DEFAULT_PDF_SETTINGS);
         setIsDirty(true);
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center gap-3 text-slate-500 italic">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                Loading PDF settings...
+            </div>
+        );
+    }
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 items-start">

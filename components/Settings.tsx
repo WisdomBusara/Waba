@@ -4,6 +4,7 @@ import { BillingSettings } from '../types';
 import BillingCycleCard from './BillingCycleCard';
 import PdfCustomizationCard from './PdfCustomizationCard';
 import DatabaseDiagnostics from './DatabaseDiagnostics';
+import NotificationSettingsCard from './NotificationSettingsCard';
 import { fetchFromApi } from '../lib/api';
 
 interface SettingsProps {
@@ -58,6 +59,8 @@ const Settings: React.FC<SettingsProps> = ({ showToast }) => {
                 </div>
             ) : billingSettings ? (
                 <div className="space-y-8">
+                    <NotificationSettingsCard showToast={showToast} />
+
                     <BillingCycleCard 
                         settings={billingSettings} 
                         onSave={handleSaveBillingSettings} 

@@ -2,10 +2,14 @@ const API_BASE_URL = '/api';
 
 export const fetchFromApi = async (endpoint: string, options?: RequestInit) => {
     try {
+        const userStr = localStorage.getItem('user');
+        const user = userStr ? JSON.parse(userStr) : null;
+        
         const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
             ...options,
             headers: {
                 'Accept': 'application/json',
+                ...(user ? { 'X-User-Role': user.role, 'X-User-Id': user.id.toString() } : {}),
                 ...options?.headers,
             },
         });
@@ -16,8 +20,13 @@ export const fetchFromApi = async (endpoint: string, options?: RequestInit) => {
         if (!response.ok) {
             let errorMessage = `API Error (${response.status} on ${endpoint})`;
             try {
-                const errorData = isJson ? await response.json() : { message: await response.text() };
-                errorMessage = errorData.message || errorMessage;
+                if (isJson) {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorData.error || errorMessage;
+                } else {
+                    const text = await response.text();
+                    errorMessage = text ? `Server Error: ${text.substring(0, 100)}...` : errorMessage;
+                }
             } catch (e) {
                 // Ignore parse error for error response
             }

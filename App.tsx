@@ -11,6 +11,7 @@ import Invoices from './components/Invoices';
 import Reports from './components/Reports';
 import Payments from './components/Payments';
 import Users from './components/Users';
+import AuditLogs from './components/AuditLogs';
 import LoadingScreen from './components/LoadingScreen';
 import Login from './components/Login';
 
@@ -99,6 +100,8 @@ const App: React.FC = () => {
         return <Reports />;
       case 'Users':
         return <Users showToast={showToast} />;
+      case 'Audit Logs':
+        return <AuditLogs />;
       case 'Settings':
         return <Settings showToast={showToast} />;
       default:

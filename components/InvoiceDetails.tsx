@@ -1,11 +1,12 @@
 
-import React from 'react';
-import { Invoice } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Invoice, PdfSettings } from '../types';
 import { DownloadIcon, EditIcon, CreditCardIcon } from './icons';
 import InvoiceStatusBadge from './InvoiceStatusBadge';
 import { PDFDownloadLink } from '@react-pdf/renderer';
 import BillTemplate from './pdf/BillTemplate';
-import { getPdfSettings } from '../lib/pdfSettings';
+import { DEFAULT_PDF_SETTINGS } from '../lib/pdfSettings';
+import { fetchFromApi } from '../lib/api';
 import { Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription } from './ui/Sheet';
 import { Button } from './ui/Button';
 
@@ -34,8 +35,24 @@ const LoadingSpinner: React.FC<{ className?: string }> = ({ className = "h-5 w-5
 );
 
 const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice, onClose, onEdit, onMarkAsPaid }) => {
-    // Refresh settings whenever the details view is opened to catch latest customizations
-    const pdfSettings = getPdfSettings();
+    const [pdfSettings, setPdfSettings] = useState<PdfSettings>(DEFAULT_PDF_SETTINGS);
+    const [loadingSettings, setLoadingSettings] = useState(true);
+
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const data = await fetchFromApi('pdf-settings');
+                if (data) {
+                    setPdfSettings({ ...DEFAULT_PDF_SETTINGS, ...data });
+                }
+            } catch (err) {
+                console.error('Failed to load PDF settings', err);
+            } finally {
+                setLoadingSettings(false);
+            }
+        };
+        loadSettings();
+    }, []);
 
     return (
         <Sheet open={true} onOpenChange={onClose}>
@@ -63,8 +80,8 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice, onClose, onEdi
                     <div>
                         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Invoice Items</h3>
                         <div className="border border-slate-200 dark:border-slate-700 rounded-lg">
-                            {invoice.items.map((item, index) => (
-                                <div key={index} className={`p-3 ${index < invoice.items.length - 1 ? 'border-b border-slate-200 dark:border-slate-700' : ''}`}>
+                            {(invoice.items || []).map((item, index, arr) => (
+                                <div key={index} className={`p-3 ${index < arr.length - 1 ? 'border-b border-slate-200 dark:border-slate-700' : ''}`}>
                                     <div className="flex justify-between items-center">
                                         <p className="text-sm text-slate-700 dark:text-slate-300 pr-2">{item.description}</p>
                                         <p className="text-sm font-semibold text-slate-900 dark:text-white whitespace-nowrap">{item.total.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })}</p>
@@ -102,27 +119,29 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice, onClose, onEdi
                                 <EditIcon className="h-4 w-4 mr-2" />
                                 Edit
                             </Button>
-                            <PDFDownloadLink
-                                document={<BillTemplate invoice={invoice} settings={pdfSettings} />}
-                                fileName={`Invoice-${invoice.id}.pdf`}
-                                title={`Download PDF for Invoice ${invoice.id}`}
-                            >
-                                {({ loading }) => (
-                                     <Button disabled={loading}>
-                                        {loading ? (
-                                            <>
-                                                <LoadingSpinner className="h-4 w-4 mr-2 text-white" />
-                                                Generating...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <DownloadIcon className="h-4 w-4 mr-2" />
-                                                Download PDF
-                                            </>
-                                        )}
-                                    </Button>
-                                )}
-                            </PDFDownloadLink>
+                            {!loadingSettings && (
+                                <PDFDownloadLink
+                                    document={<BillTemplate invoice={invoice} settings={pdfSettings} />}
+                                    fileName={`Invoice-${invoice.id}.pdf`}
+                                    title={`Download PDF for Invoice ${invoice.id}`}
+                                >
+                                    {({ loading }) => (
+                                         <Button disabled={loading}>
+                                            {loading ? (
+                                                <>
+                                                    <LoadingSpinner className="h-4 w-4 mr-2 text-white" />
+                                                    Generating...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <DownloadIcon className="h-4 w-4 mr-2" />
+                                                    Download PDF
+                                                </>
+                                            )}
+                                        </Button>
+                                    )}
+                                </PDFDownloadLink>
+                            )}
                         </div>
                     </div>
                 </SheetFooter>

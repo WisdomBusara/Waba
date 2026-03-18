@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Meter, MeterReading, MeterStatus, MeterStatusEvent } from '../types';
 import StatusBadge from './StatusBadge';
-import { WrenchIcon, PlusIcon, EditIcon, ChevronRightIcon } from './icons';
+import { WrenchIcon, PlusIcon, EditIcon, ChevronRightIcon, CheckCircleIcon } from './icons';
 import AddReadingForm from './AddReadingForm';
 import { ReadingFormData } from '../lib/schemas';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from './ui/Sheet';
@@ -76,13 +76,23 @@ const MeterDetails: React.FC<MeterDetailsProps> = ({ meter, readings, statusHist
                                 <DetailItem label="Installation Date" value={meter.installationDate} />
                                 <div>
                                     <p className="text-sm text-slate-500 dark:text-slate-400">Actions</p>
-                                    <button
-                                        onClick={() => handleStatusChange('Needs Maintenance')}
-                                        className="flex items-center text-sm text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-200 font-medium"
-                                    >
-                                        <WrenchIcon className="h-4 w-4 mr-2" />
-                                        Mark for Maintenance
-                                    </button>
+                                    {meter.status === 'Needs Maintenance' ? (
+                                        <button
+                                            onClick={() => handleStatusChange('Active')}
+                                            className="flex items-center text-sm text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 font-medium"
+                                        >
+                                            <CheckCircleIcon className="h-4 w-4 mr-2" />
+                                            Mark as Active
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleStatusChange('Needs Maintenance')}
+                                            className="flex items-center text-sm text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-200 font-medium"
+                                        >
+                                            <WrenchIcon className="h-4 w-4 mr-2" />
+                                            Mark for Maintenance
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>

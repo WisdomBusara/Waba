@@ -35,6 +35,34 @@ async function startServer() {
     return trimmed;
   };
 
+  const checkRole = (roles: string[]) => {
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const userRole = req.headers['x-user-role'] as string;
+      if (!userRole || !roles.includes(userRole)) {
+        return res.status(403).json({ message: 'Forbidden: Insufficient permissions' });
+      }
+      next();
+    };
+  };
+
+  const logAudit = (
+    req: express.Request,
+    actionType: string,
+    entityType: string,
+    entityId: string | null,
+    details: string
+  ) => {
+    try {
+      const userId = req.headers['x-user-id'] as string || 'System';
+      const ipAddress = req.ip || req.socket.remoteAddress || 'Unknown';
+      db.prepare(
+        'INSERT INTO audit_logs (actorId, actionType, entityType, entityId, ipAddress, details) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(userId, actionType, entityType, entityId, ipAddress, details);
+    } catch (error) {
+      console.error('Failed to log audit event:', error);
+    }
+  };
+
   // --- AUTHENTICATION ---
   app.post('/api/auth/login', (req, res) => {
     try {
@@ -273,7 +301,13 @@ async function startServer() {
 
       const invoices = db
         .prepare('SELECT * FROM invoices WHERE customerAccount = ? ORDER BY issueDate DESC')
-        .all(customer.accountNumber);
+        .all(customer.accountNumber) as any[];
+
+      for (const inv of invoices) {
+        inv.items = db
+          .prepare('SELECT * FROM invoice_items WHERE invoiceId = ? ORDER BY id ASC')
+          .all(inv.id);
+      }
 
       const payments = db
         .prepare('SELECT * FROM payments WHERE customerName = ? ORDER BY date DESC')
@@ -316,6 +350,7 @@ async function startServer() {
         'INSERT INTO customers (id, accountNumber, name, email, phone, address, joinDate) VALUES (?, ?, ?, ?, ?, ?, ?)'
       ).run(id, acc, name, email, phone, address, new Date().toISOString().split('T')[0]);
 
+      logAudit(req, 'CREATE', 'Customer', id, `Created customer ${name} (${acc})`);
       res.status(201).json({ id, accountNumber: acc });
     } catch (err: any) {
       res.status(500).json({ message: 'Failed to create customer', error: err.message });
@@ -329,6 +364,7 @@ async function startServer() {
         'UPDATE customers SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?'
       ).run(name, email, phone, address, req.params.id);
 
+      logAudit(req, 'UPDATE', 'Customer', req.params.id, `Updated customer ${name}`);
       res.json({ message: 'Updated' });
     } catch (err: any) {
       res.status(500).json({ message: 'Update failed', error: err.message });
@@ -436,6 +472,7 @@ async function startServer() {
         }
       })();
 
+      logAudit(req, 'CREATE', 'Meter', meterId, `Created meter ${serialNumber}`);
       res.status(201).json({ id: meterId });
     } catch (err: any) {
       res.status(500).json({ message: 'Create failed', error: err.message });
@@ -461,6 +498,7 @@ async function startServer() {
         }
       })();
 
+      logAudit(req, 'UPDATE', 'Meter', req.params.id, `Updated meter ${serialNumber}`);
       res.json({ message: 'Updated' });
     } catch (err: any) {
       res.status(500).json({ message: 'Update failed', error: err.message });
@@ -476,6 +514,7 @@ async function startServer() {
         'INSERT INTO meter_readings (id, meterId, reading, date) VALUES (?, ?, ?, ?)'
       ).run(id, req.params.id, reading, date);
 
+      logAudit(req, 'CREATE', 'Reading', id, `Added reading ${reading} to meter ${req.params.id}`);
       res.status(201).json({ id });
     } catch (err: any) {
       res.status(500).json({ message: 'Add reading failed', error: err.message });
@@ -731,6 +770,7 @@ async function startServer() {
         );
       })();
 
+      logAudit(req, 'UPDATE', 'Invoice', req.params.id, `Marked invoice ${req.params.id} as Paid`);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: 'Payment failed', error: err.message });
@@ -791,7 +831,7 @@ async function startServer() {
   });
 
   // --- USERS ---
-  app.get('/api/users', (req, res) => {
+  app.get('/api/users', checkRole(['Admin']), (req, res) => {
     try {
       const users = db
         .prepare('SELECT id, name, email, role, lastActive, status FROM users ORDER BY name ASC')
@@ -803,7 +843,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/users', (req, res) => {
+  app.post('/api/users', checkRole(['Admin']), (req, res) => {
     const { name, email, role, password } = req.body;
 
     try {
@@ -812,31 +852,167 @@ async function startServer() {
         return res.status(400).json({ message: 'A user with this email already exists.' });
       }
 
+      const newId = `USR-${Date.now()}`;
       db.prepare(
         'INSERT INTO users (id, name, email, password, role, lastActive) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(`USR-${Date.now()}`, name, email, password || 'admin123', role, new Date().toISOString());
+      ).run(newId, name, email, password || 'admin123', role, new Date().toISOString());
 
-      res.status(201).json({ success: true });
+      logAudit(req, 'CREATE', 'User', newId, `Created user ${name} (${email}) with role ${role}`);
+      res.status(201).json({ success: true, id: newId });
     } catch (err: any) {
       res.status(500).json({ message: 'Failed to save user', error: err.message });
     }
   });
 
-  app.put('/api/users/:id/deactivate', (req, res) => {
+  app.put('/api/users/:id', checkRole(['Admin']), (req, res) => {
+    const { name, email, role, status } = req.body;
+    try {
+      db.prepare(
+        'UPDATE users SET name = ?, email = ?, role = ?, status = ? WHERE id = ?'
+      ).run(name, email, role, status, req.params.id);
+      
+      logAudit(req, 'UPDATE', 'User', req.params.id, `Updated user ${name} (${email})`);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Update failed', error: err.message });
+    }
+  });
+
+  app.put('/api/users/:id/deactivate', checkRole(['Admin']), (req, res) => {
     try {
       db.prepare("UPDATE users SET status = 'Inactive' WHERE id = ?").run(req.params.id);
+      logAudit(req, 'DEACTIVATE', 'User', req.params.id, `Deactivated user ${req.params.id}`);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: 'Deactivation failed', error: err.message });
     }
   });
 
-  app.delete('/api/users/:id', (req, res) => {
+  app.delete('/api/users/:id', checkRole(['Admin']), (req, res) => {
     try {
       db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+      logAudit(req, 'DELETE', 'User', req.params.id, `Deleted user ${req.params.id}`);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: 'Deletion failed', error: err.message });
+    }
+  });
+
+  // --- AUDIT LOGS ---
+  app.get('/api/audit-logs', checkRole(['Admin']), (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const search = req.query.search as string;
+      const actionType = req.query.actionType as string;
+      const entityType = req.query.entityType as string;
+
+      let query = 'SELECT * FROM audit_logs WHERE 1=1';
+      let countQuery = 'SELECT count(*) as count FROM audit_logs WHERE 1=1';
+      const params: any[] = [];
+
+      if (search) {
+        query += ' AND (actorId LIKE ? OR details LIKE ? OR actionType LIKE ? OR entityType LIKE ?)';
+        countQuery += ' AND (actorId LIKE ? OR details LIKE ? OR actionType LIKE ? OR entityType LIKE ?)';
+        const searchParam = `%${search}%`;
+        params.push(searchParam, searchParam, searchParam, searchParam);
+      }
+
+      if (actionType) {
+        query += ' AND actionType = ?';
+        countQuery += ' AND actionType = ?';
+        params.push(actionType);
+      }
+
+      if (entityType) {
+        query += ' AND entityType = ?';
+        countQuery += ' AND entityType = ?';
+        params.push(entityType);
+      }
+
+      query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+      
+      const logs = db.prepare(query).all(...params, limit, offset);
+      const total = (db.prepare(countQuery).get(...params) as any).count;
+      
+      // Map database fields to what the frontend expects
+      const mappedLogs = logs.map((log: any) => ({
+        id: log.id,
+        actorUserId: log.actorId,
+        actorEmail: log.actorId, // We don't have email in audit_logs, just use actorId
+        actionType: log.actionType,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        details: log.details,
+        ipAddress: log.ipAddress,
+        createdAt: log.timestamp
+      }));
+
+      res.json({ logs: mappedLogs, total });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to fetch audit logs', error: err.message });
+    }
+  });
+
+  // --- NOTIFICATION SETTINGS ---
+  app.get('/api/notification-settings', (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      let settings = db.prepare('SELECT * FROM notification_settings WHERE userId = ?').get(userId);
+      if (!settings) {
+        db.prepare('INSERT INTO notification_settings (userId) VALUES (?)').run(userId);
+        settings = db.prepare('SELECT * FROM notification_settings WHERE userId = ?').get(userId);
+      }
+      res.json(settings);
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to fetch notification settings', error: err.message });
+    }
+  });
+
+  app.put('/api/notification-settings', (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const { highConsumptionThreshold, emailAlerts, pushAlerts } = req.body;
+      db.prepare(
+        'UPDATE notification_settings SET highConsumptionThreshold = ?, emailAlerts = ?, pushAlerts = ? WHERE userId = ?'
+      ).run(highConsumptionThreshold, emailAlerts ? 1 : 0, pushAlerts ? 1 : 0, userId);
+      
+      logAudit(req, 'UPDATE', 'NotificationSettings', userId, 'Updated notification preferences');
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to update notification settings', error: err.message });
+    }
+  });
+
+  // --- PDF SETTINGS ---
+  app.get('/api/pdf-settings', (req, res) => {
+    try {
+      let settings = db.prepare('SELECT * FROM pdf_settings WHERE id = 1').get();
+      if (!settings) {
+        db.prepare('INSERT INTO pdf_settings (id) VALUES (1)').run();
+        settings = db.prepare('SELECT * FROM pdf_settings WHERE id = 1').get();
+      }
+      res.json(settings);
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to fetch PDF settings', error: err.message });
+    }
+  });
+
+  app.put('/api/pdf-settings', checkRole(['Admin']), (req, res) => {
+    try {
+      const { logoUrl, themeColor, footerText } = req.body;
+      db.prepare(
+        'UPDATE pdf_settings SET logoUrl = ?, themeColor = ?, footerText = ? WHERE id = 1'
+      ).run(logoUrl, themeColor, footerText);
+      
+      logAudit(req, 'UPDATE', 'PDFSettings', '1', 'Updated PDF customization settings');
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to update PDF settings', error: err.message });
     }
   });
 
