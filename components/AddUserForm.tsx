@@ -18,7 +18,7 @@ const UserForm: React.FC<UserFormProps> = ({ onSave, onCancel, userToEdit }) => 
     const [formData, setFormData] = useState<UserFormData & { status?: string }>({
         name: '',
         email: '',
-        role: 'Agent',
+        role: '' as any,
         status: 'Active'
     });
     const [errors, setErrors] = useState<{ [key: string]: string | undefined }>({});
@@ -99,12 +99,14 @@ const UserForm: React.FC<UserFormProps> = ({ onSave, onCancel, userToEdit }) => 
                             name="role" 
                             value={formData.role} 
                             onChange={handleChange}
-                            className="flex h-10 w-full rounded-md border border-slate-300 bg-white dark:bg-slate-800 dark:border-slate-700 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            className={`flex h-10 w-full rounded-md border border-slate-300 bg-white dark:bg-slate-800 dark:border-slate-700 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${errors.role ? 'border-red-500' : ''}`}
                         >
+                            <option value="" disabled>Select a role...</option>
                             <option value="Admin">Administrator (Full Access)</option>
                             <option value="Manager">Manager (Reports & Billing)</option>
                             <option value="Agent">Agent (Meter Readings Only)</option>
                         </select>
+                        {errors.role && <p className="mt-1 text-xs text-red-500">{errors.role}</p>}
                         <p className="mt-2 text-[10px] text-slate-500">Role defines the level of system features the user can access.</p>
                     </div>
 
@@ -127,7 +129,7 @@ const UserForm: React.FC<UserFormProps> = ({ onSave, onCancel, userToEdit }) => 
 
                 <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                     <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
-                    <Button type="submit" disabled={!isFormValid}>{isEditMode ? 'Update Account' : 'Create Account'}</Button>
+                    <Button type="submit">{isEditMode ? 'Update Account' : 'Create Account'}</Button>
                 </div>
             </form>
         </Modal>

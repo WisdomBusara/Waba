@@ -118,6 +118,18 @@ export function initializeDatabase() {
             highConsumptionThreshold REAL DEFAULT 1000,
             emailAlerts BOOLEAN DEFAULT 1,
             pushAlerts BOOLEAN DEFAULT 0,
+            unusualActivityAlerts BOOLEAN DEFAULT 1,
+            FOREIGN KEY (userId) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS notifications (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            type TEXT NOT NULL,
+            isRead BOOLEAN DEFAULT 0,
+            createdAt TEXT NOT NULL,
             FOREIGN KEY (userId) REFERENCES users(id)
         );
 
@@ -252,6 +264,14 @@ export function seedData() {
     ];
     const insertUser = db.prepare('INSERT INTO users (id, name, email, password, role, lastActive) VALUES (?, ?, ?, ?, ?, ?)');
     users.forEach(u => insertUser.run(u.id, u.name, u.email, u.password, u.role, u.lastActive));
+
+    const notifications = [
+        { id: 'NOTIF-1', userId: 'USR-1', title: 'High Consumption Alert', message: 'Meter M-003 reported unusually high consumption.', type: 'alert', isRead: 0, createdAt: new Date().toISOString() },
+        { id: 'NOTIF-2', userId: 'USR-1', title: 'System Update', message: 'The system will undergo maintenance at midnight.', type: 'info', isRead: 1, createdAt: new Date(Date.now() - 86400000).toISOString() },
+        { id: 'NOTIF-3', userId: 'USR-1', title: 'New User Registered', message: 'A new agent has been added to the system.', type: 'success', isRead: 0, createdAt: new Date(Date.now() - 3600000).toISOString() },
+    ];
+    const insertNotification = db.prepare('INSERT INTO notifications (id, userId, title, message, type, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    notifications.forEach(n => insertNotification.run(n.id, n.userId, n.title, n.message, n.type, n.isRead, n.createdAt));
 
     console.log('Database seeded successfully.');
 }

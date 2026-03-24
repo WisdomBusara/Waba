@@ -33,7 +33,7 @@ export const editMeterSchema = baseMeterSchema;
 export type AddMeterFormData = z.infer<typeof addMeterSchema>;
 export type EditMeterFormData = z.infer<typeof editMeterSchema>;
 
-export const createInvoiceSchema = z.object({
+export const baseInvoiceSchema = z.object({
   customerId: z.string().min(1, { message: "A customer must be selected." }),
   issueDate: z.string().min(1, { message: "Issue date is required." }),
   dueDate: z.string().min(1, { message: "Due date is required." }),
@@ -42,7 +42,9 @@ export const createInvoiceSchema = z.object({
     quantity: z.coerce.number().min(0.01, { message: "Quantity must be positive." }),
     unitPrice: z.coerce.number().min(0, { message: "Unit price must be non-negative." }),
   })).min(1, { message: "At least one item is required." }),
-}).refine(data => new Date(data.dueDate) >= new Date(data.issueDate), {
+});
+
+export const createInvoiceSchema = baseInvoiceSchema.refine(data => new Date(data.dueDate) >= new Date(data.issueDate), {
   message: "Due date cannot be before the issue date.",
   path: ["dueDate"],
 });

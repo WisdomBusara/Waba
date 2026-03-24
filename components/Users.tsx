@@ -76,17 +76,18 @@ const Users: React.FC<UsersProps> = ({ showToast }) => {
         }
     };
 
-    const [userToDeactivate, setUserToDeactivate] = useState<User | null>(null);
-
-    const handleDeactivateUser = async () => {
-        if (!userToDeactivate) return;
+    const handleToggleStatus = async (user: User) => {
+        const newStatus = user.status === 'Inactive' ? 'Active' : 'Inactive';
         try {
-            await fetchFromApi(`users/${userToDeactivate.id}/deactivate`, { method: 'PUT' });
-            showToast('User deactivated successfully.', 'success');
-            setUserToDeactivate(null);
+            await fetchFromApi(`users/${user.id}/status`, { 
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            showToast(`User ${newStatus.toLowerCase()} successfully.`, 'success');
             fetchUsers();
         } catch (err: any) {
-            showToast(err.message || 'Failed to deactivate user.', 'error');
+            showToast(err.message || `Failed to ${newStatus.toLowerCase()} user.`, 'error');
         }
     };
 
@@ -148,12 +149,16 @@ const Users: React.FC<UsersProps> = ({ showToast }) => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${user.status === 'Inactive' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                                <button
+                                                    onClick={() => handleToggleStatus(user)}
+                                                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold transition-colors ${user.status === 'Inactive' ? 'bg-red-100 text-red-800 hover:bg-red-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'}`}
+                                                    title={`Click to ${user.status === 'Inactive' ? 'activate' : 'deactivate'} user`}
+                                                >
                                                     {user.status || 'Active'}
-                                                </span>
+                                                </button>
                                             </td>
                                             <td className="px-6 py-4 text-slate-500 text-xs">
-                                                {new Date(user.lastActive).toLocaleDateString()}
+                                                {user.lastActive ? new Date(user.lastActive).toLocaleDateString() : 'Never'}
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
@@ -188,23 +193,6 @@ const Users: React.FC<UsersProps> = ({ showToast }) => {
                     onCancel={() => { setIsAddingUser(false); setUserToEdit(null); }} 
                     userToEdit={userToEdit}
                 />
-            )}
-
-            {userToDeactivate && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-md w-full p-6 animate-fade-in-up">
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Deactivate User</h3>
-                        <p className="text-slate-500 dark:text-slate-400 mb-6">
-                            Are you sure you want to deactivate <strong>{userToDeactivate.name}</strong>? They will no longer be able to access the system.
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <Button variant="outline" onClick={() => setUserToDeactivate(null)}>Cancel</Button>
-                            <Button variant="primary" className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeactivateUser}>
-                                Yes, Deactivate
-                            </Button>
-                        </div>
-                    </div>
-                </div>
             )}
 
             {userToDelete && (

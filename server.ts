@@ -4,6 +4,8 @@ import { createServer as createViteServer } from 'vite';
 import dbModule from './server/db.ts';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import http from 'http';
+import { Server } from 'socket.io';
 
 const db = (dbModule as any).default || dbModule;
 
@@ -13,9 +15,181 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  const httpServer = http.createServer(app);
+  const io = new Server(httpServer, { cors: { origin: '*' } });
 
   app.use(cors());
   app.use(express.json());
+
+  app.use((req, res, next) => {
+    import('fs').then(fs => {
+      fs.appendFileSync('server.log', `[REQ] ${req.method} ${req.url}\n`);
+    });
+    next();
+  });
+
+  const getDashboardData = () => {
+    const totalBilled =
+      db
+        .prepare(
+          "SELECT SUM(total) as value FROM invoices WHERE issueDate >= date('now', '-30 days')"
+        )
+        .get()?.value || 0;
+
+    const totalCollected =
+      db
+        .prepare(
+          "SELECT SUM(amount) as value FROM payments WHERE date >= date('now', '-30 days')"
+        )
+        .get()?.value || 0;
+
+    const activeCustomers =
+      db.prepare("SELECT count(*) as value FROM customers").get()?.value || 0;
+
+    const overdueAccounts =
+      db
+        .prepare(
+          "SELECT count(*) as value FROM invoices WHERE status = 'Overdue'"
+        )
+        .get()?.value || 0;
+
+    const revenueData = db
+      .prepare(`
+        WITH RECURSIVE months(m) AS (
+          SELECT date('now', 'start of month')
+          UNION ALL
+          SELECT date(m, '-1 month')
+          FROM months
+          WHERE m > date('now', 'start of month', '-5 months')
+        )
+        SELECT
+          strftime('%b', m) as month,
+          (
+            SELECT IFNULL(SUM(total), 0)
+            FROM invoices
+            WHERE strftime('%Y-%m', issueDate) = strftime('%Y-%m', m)
+          ) as billed,
+          (
+            SELECT IFNULL(SUM(amount), 0)
+            FROM payments
+            WHERE strftime('%Y-%m', date) = strftime('%Y-%m', m)
+          ) as collected
+        FROM months
+        ORDER BY m ASC
+      `)
+      .all();
+
+    const agingData = [
+      {
+        name: '0-30 Days',
+        value:
+          db
+            .prepare(
+              "SELECT SUM(total) as v FROM invoices WHERE status = 'Due' AND dueDate >= date('now', '-30 days')"
+            )
+            .get()?.v || 0,
+        fill: '#3b82f6',
+      },
+      {
+        name: '31-60 Days',
+        value:
+          db
+            .prepare(
+              "SELECT SUM(total) as v FROM invoices WHERE status = 'Overdue' AND dueDate BETWEEN date('now', '-60 days') AND date('now', '-31 days')"
+            )
+            .get()?.v || 0,
+        fill: '#f59e0b',
+      },
+      {
+        name: '61-90 Days',
+        value:
+          db
+            .prepare(
+              "SELECT SUM(total) as v FROM invoices WHERE status = 'Overdue' AND dueDate BETWEEN date('now', '-90 days') AND date('now', '-61 days')"
+            )
+            .get()?.v || 0,
+        fill: '#ef4444',
+      },
+      {
+        name: '90+ Days',
+        value:
+          db
+            .prepare(
+              "SELECT SUM(total) as v FROM invoices WHERE status = 'Overdue' AND dueDate < date('now', '-90 days')"
+            )
+            .get()?.v || 0,
+        fill: '#7f1d1d',
+      },
+    ];
+
+    const defaulters = db
+      .prepare(
+        "SELECT id, customerName as name, customerAccount as account, total as amountDue, CAST(julianday('now') - julianday(dueDate) AS INTEGER) as daysOverdue FROM invoices WHERE status = 'Overdue' ORDER BY amountDue DESC LIMIT 5"
+      )
+      .all();
+
+    const recentPayments = db
+      .prepare('SELECT * FROM payments ORDER BY date DESC LIMIT 4')
+      .all();
+
+    return {
+      kpiData: [
+        {
+          title: 'Total Billed (Month)',
+          value: \`KES \${Number(totalBilled).toLocaleString()}\`,
+          change: '+5.2%',
+          changeType: 'increase',
+        },
+        {
+          title: 'Total Collected (Month)',
+          value: \`KES \${Number(totalCollected).toLocaleString()}\`,
+          change: '+8.1%',
+          changeType: 'increase',
+        },
+        {
+          title: 'Active Customers',
+          value: Number(activeCustomers).toLocaleString(),
+          change: '+25',
+          changeType: 'increase',
+        },
+        {
+          title: 'Overdue Accounts',
+          value: Number(overdueAccounts).toLocaleString(),
+          change: '-3.4%',
+          changeType: 'decrease',
+        },
+      ],
+      revenueData,
+      agingData,
+      defaulters,
+      recentPayments,
+      nrwData: [
+        { day: 'Mon', percentage: 18.5 },
+        { day: 'Tue', percentage: 19.2 },
+        { day: 'Wed', percentage: 17.8 },
+        { day: 'Thu', percentage: 20.1 },
+        { day: 'Fri', percentage: 19.5 },
+        { day: 'Sat', percentage: 21.3 },
+        { day: 'Sun', percentage: 20.8 },
+      ],
+    };
+  };
+
+  const broadcastDashboardUpdate = () => {
+    try {
+      io.emit('dashboard_update', getDashboardData());
+    } catch (err) {
+      console.error('Failed to broadcast dashboard update:', err);
+    }
+  };
+
+  io.on('connection', (socket) => {
+    console.log('Client connected to socket.io');
+    socket.emit('dashboard_update', getDashboardData());
+    socket.on('disconnect', () => {
+      console.log('Client disconnected');
+    });
+  });
 
   const normalizeCustomerAccount = (value?: string | null) => {
     if (!value) return null;
@@ -95,151 +269,9 @@ async function startServer() {
 
   // --- DASHBOARD ---
   app.get('/api/dashboard', (req, res) => {
+    import('fs').then(fs => fs.appendFileSync('server.log', `[ROUTE] /api/dashboard HIT\n`));
     try {
-      const totalBilled =
-        db
-          .prepare(
-            "SELECT SUM(total) as value FROM invoices WHERE issueDate >= date('now', '-30 days')"
-          )
-          .get()?.value || 0;
-
-      const totalCollected =
-        db
-          .prepare(
-            "SELECT SUM(amount) as value FROM payments WHERE date >= date('now', '-30 days')"
-          )
-          .get()?.value || 0;
-
-      const activeCustomers =
-        db.prepare("SELECT count(*) as value FROM customers").get()?.value || 0;
-
-      const overdueAccounts =
-        db
-          .prepare(
-            "SELECT count(*) as value FROM invoices WHERE status = 'Overdue'"
-          )
-          .get()?.value || 0;
-
-      const revenueData = db
-        .prepare(`
-          WITH RECURSIVE months(m) AS (
-            SELECT date('now', 'start of month')
-            UNION ALL
-            SELECT date(m, '-1 month')
-            FROM months
-            WHERE m > date('now', 'start of month', '-5 months')
-          )
-          SELECT
-            strftime('%b', m) as month,
-            (
-              SELECT IFNULL(SUM(total), 0)
-              FROM invoices
-              WHERE strftime('%Y-%m', issueDate) = strftime('%Y-%m', m)
-            ) as billed,
-            (
-              SELECT IFNULL(SUM(amount), 0)
-              FROM payments
-              WHERE strftime('%Y-%m', date) = strftime('%Y-%m', m)
-            ) as collected
-          FROM months
-          ORDER BY m ASC
-        `)
-        .all();
-
-      const agingData = [
-        {
-          name: '0-30 Days',
-          value:
-            db
-              .prepare(
-                "SELECT SUM(total) as v FROM invoices WHERE status = 'Due' AND dueDate >= date('now', '-30 days')"
-              )
-              .get()?.v || 0,
-          fill: '#3b82f6',
-        },
-        {
-          name: '31-60 Days',
-          value:
-            db
-              .prepare(
-                "SELECT SUM(total) as v FROM invoices WHERE status = 'Overdue' AND dueDate BETWEEN date('now', '-60 days') AND date('now', '-31 days')"
-              )
-              .get()?.v || 0,
-          fill: '#f59e0b',
-        },
-        {
-          name: '61-90 Days',
-          value:
-            db
-              .prepare(
-                "SELECT SUM(total) as v FROM invoices WHERE status = 'Overdue' AND dueDate BETWEEN date('now', '-90 days') AND date('now', '-61 days')"
-              )
-              .get()?.v || 0,
-          fill: '#ef4444',
-        },
-        {
-          name: '90+ Days',
-          value:
-            db
-              .prepare(
-                "SELECT SUM(total) as v FROM invoices WHERE status = 'Overdue' AND dueDate < date('now', '-90 days')"
-              )
-              .get()?.v || 0,
-          fill: '#7f1d1d',
-        },
-      ];
-
-      const defaulters = db
-        .prepare(
-          "SELECT id, customerName as name, customerAccount as account, total as amountDue, CAST(julianday('now') - julianday(dueDate) AS INTEGER) as daysOverdue FROM invoices WHERE status = 'Overdue' ORDER BY amountDue DESC LIMIT 5"
-        )
-        .all();
-
-      const recentPayments = db
-        .prepare('SELECT * FROM payments ORDER BY date DESC LIMIT 4')
-        .all();
-
-      res.json({
-        kpiData: [
-          {
-            title: 'Total Billed (Month)',
-            value: `KES ${Number(totalBilled).toLocaleString()}`,
-            change: '+5.2%',
-            changeType: 'increase',
-          },
-          {
-            title: 'Total Collected (Month)',
-            value: `KES ${Number(totalCollected).toLocaleString()}`,
-            change: '+8.1%',
-            changeType: 'increase',
-          },
-          {
-            title: 'Active Customers',
-            value: Number(activeCustomers).toLocaleString(),
-            change: '+25',
-            changeType: 'increase',
-          },
-          {
-            title: 'Overdue Accounts',
-            value: Number(overdueAccounts).toLocaleString(),
-            change: '-3.4%',
-            changeType: 'decrease',
-          },
-        ],
-        revenueData,
-        agingData,
-        defaulters,
-        recentPayments,
-        nrwData: [
-          { day: 'Mon', percentage: 18.5 },
-          { day: 'Tue', percentage: 19.2 },
-          { day: 'Wed', percentage: 17.8 },
-          { day: 'Thu', percentage: 20.1 },
-          { day: 'Fri', percentage: 19.5 },
-          { day: 'Sat', percentage: 21.3 },
-          { day: 'Sun', percentage: 20.8 },
-        ],
-      });
+      res.json(getDashboardData());
     } catch (error: any) {
       res
         .status(500)
@@ -351,6 +383,7 @@ async function startServer() {
       ).run(id, acc, name, email, phone, address, new Date().toISOString().split('T')[0]);
 
       logAudit(req, 'CREATE', 'Customer', id, `Created customer ${name} (${acc})`);
+      broadcastDashboardUpdate();
       res.status(201).json({ id, accountNumber: acc });
     } catch (err: any) {
       res.status(500).json({ message: 'Failed to create customer', error: err.message });
@@ -365,6 +398,7 @@ async function startServer() {
       ).run(name, email, phone, address, req.params.id);
 
       logAudit(req, 'UPDATE', 'Customer', req.params.id, `Updated customer ${name}`);
+      broadcastDashboardUpdate();
       res.json({ message: 'Updated' });
     } catch (err: any) {
       res.status(500).json({ message: 'Update failed', error: err.message });
@@ -615,6 +649,85 @@ async function startServer() {
   }
 });
 
+  app.post('/api/invoices', (req, res) => {
+    try {
+      const { customerId, issueDate, dueDate, items, status } = req.body;
+      
+      const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId) as any;
+      if (!customer) {
+        return res.status(404).json({ message: 'Customer not found' });
+      }
+
+      const last = db.prepare('SELECT id FROM invoices ORDER BY id DESC LIMIT 1').get() as any;
+      const nextIdNum = last ? parseInt(last.id.split('-').pop(), 10) + 1 : 1001;
+      const id = `INV-${new Date().getFullYear()}-${String(nextIdNum).padStart(4, '0')}`;
+
+      let subtotal = 0;
+      for (const item of items) {
+        subtotal += Number(item.quantity) * Number(item.unitPrice);
+      }
+      const penalties = status === 'Overdue' ? subtotal * 0.1 : 0;
+      const total = subtotal + penalties;
+
+      db.transaction(() => {
+        db.prepare(
+          'INSERT INTO invoices (id, customerName, customerAccount, customerAddress, issueDate, generationDate, dueDate, subtotal, penalties, total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, customer.name, customer.accountNumber, customer.address, issueDate, new Date().toISOString().split('T')[0], dueDate, subtotal, penalties, total, status);
+
+        const insertItem = db.prepare('INSERT INTO invoice_items (invoiceId, description, quantity, unitPrice, total) VALUES (?, ?, ?, ?, ?)');
+        for (const item of items) {
+          const itemTotal = Number(item.quantity) * Number(item.unitPrice);
+          insertItem.run(id, item.description, item.quantity, item.unitPrice, itemTotal);
+        }
+      })();
+
+      logAudit(req, 'CREATE', 'Invoice', id, `Created invoice for ${customer.name}`);
+      broadcastDashboardUpdate();
+      res.status(201).json({ id });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to create invoice', error: err.message });
+    }
+  });
+
+  app.put('/api/invoices/:id', (req, res) => {
+    try {
+      const { customerId, issueDate, dueDate, items, status } = req.body;
+      const id = req.params.id;
+      
+      const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId) as any;
+      if (!customer) {
+        return res.status(404).json({ message: 'Customer not found' });
+      }
+
+      let subtotal = 0;
+      for (const item of items) {
+        subtotal += Number(item.quantity) * Number(item.unitPrice);
+      }
+      const penalties = status === 'Overdue' ? subtotal * 0.1 : 0;
+      const total = subtotal + penalties;
+
+      db.transaction(() => {
+        db.prepare(
+          'UPDATE invoices SET customerName = ?, customerAccount = ?, customerAddress = ?, issueDate = ?, dueDate = ?, subtotal = ?, penalties = ?, total = ?, status = ? WHERE id = ?'
+        ).run(customer.name, customer.accountNumber, customer.address, issueDate, dueDate, subtotal, penalties, total, status, id);
+
+        db.prepare('DELETE FROM invoice_items WHERE invoiceId = ?').run(id);
+        
+        const insertItem = db.prepare('INSERT INTO invoice_items (invoiceId, description, quantity, unitPrice, total) VALUES (?, ?, ?, ?, ?)');
+        for (const item of items) {
+          const itemTotal = Number(item.quantity) * Number(item.unitPrice);
+          insertItem.run(id, item.description, item.quantity, item.unitPrice, itemTotal);
+        }
+      })();
+
+      logAudit(req, 'UPDATE', 'Invoice', id, `Updated invoice ${id}`);
+      broadcastDashboardUpdate();
+      res.json({ id });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to update invoice', error: err.message });
+    }
+  });
+
   app.get('/api/invoices/bulk/preview', (req, res) => {
     try {
       const unitPrice = Number(req.query.unitPrice || 110);
@@ -738,6 +851,7 @@ async function startServer() {
         }
       })();
 
+      broadcastDashboardUpdate();
       res.json({ success: true, created });
     } catch (err: any) {
       res.status(500).json({ message: 'Bulk generation failed', error: err.message });
@@ -771,6 +885,7 @@ async function startServer() {
       })();
 
       logAudit(req, 'UPDATE', 'Invoice', req.params.id, `Marked invoice ${req.params.id} as Paid`);
+      broadcastDashboardUpdate();
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: 'Payment failed', error: err.message });
@@ -878,13 +993,14 @@ async function startServer() {
     }
   });
 
-  app.put('/api/users/:id/deactivate', checkRole(['Admin']), (req, res) => {
+  app.put('/api/users/:id/status', checkRole(['Admin']), (req, res) => {
     try {
-      db.prepare("UPDATE users SET status = 'Inactive' WHERE id = ?").run(req.params.id);
-      logAudit(req, 'DEACTIVATE', 'User', req.params.id, `Deactivated user ${req.params.id}`);
+      const { status } = req.body;
+      db.prepare("UPDATE users SET status = ? WHERE id = ?").run(status, req.params.id);
+      logAudit(req, status === 'Active' ? 'ACTIVATE' : 'DEACTIVATE', 'User', req.params.id, `${status === 'Active' ? 'Activated' : 'Deactivated'} user ${req.params.id}`);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: 'Deactivation failed', error: err.message });
+      res.status(500).json({ message: 'Status update failed', error: err.message });
     }
   });
 
@@ -951,6 +1067,46 @@ async function startServer() {
       res.json({ logs: mappedLogs, total });
     } catch (err: any) {
       res.status(500).json({ message: 'Failed to fetch audit logs', error: err.message });
+    }
+  });
+
+  // --- NOTIFICATIONS ---
+  app.get('/api/notifications', (req, res) => {
+    import('fs').then(fs => fs.appendFileSync('server.log', `[ROUTE] /api/notifications HIT\n`));
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const notifications = db.prepare('SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50').all(userId);
+      const unreadCount = db.prepare('SELECT count(*) as count FROM notifications WHERE userId = ? AND isRead = 0').get(userId) as any;
+      
+      res.json({ notifications, unreadCount: unreadCount.count });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to fetch notifications', error: err.message });
+    }
+  });
+
+  app.put('/api/notifications/:id/read', (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      db.prepare('UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?').run(req.params.id, userId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to mark notification as read', error: err.message });
+    }
+  });
+
+  app.put('/api/notifications/read-all', (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      db.prepare('UPDATE notifications SET isRead = 1 WHERE userId = ?').run(userId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: 'Failed to mark all notifications as read', error: err.message });
     }
   });
 

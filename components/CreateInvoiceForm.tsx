@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Customer, CreateInvoiceFormData, Invoice, InvoiceStatus } from '../types';
-import { createInvoiceSchema } from '../lib/schemas';
+import { createInvoiceSchema, baseInvoiceSchema } from '../lib/schemas';
 import { XIcon, PlusIcon, AlertTriangleIcon } from './icons';
 import Stepper from './Stepper';
 import Modal from './ui/Modal';
@@ -113,7 +113,10 @@ const CreateInvoiceForm: React.FC<CreateInvoiceFormProps> = ({ customers, onSave
 
     const handleNext = () => {
         if (currentStep === 1) {
-            const step1Schema = createInvoiceSchema.pick({ customerId: true, issueDate: true, dueDate: true });
+            const step1Schema = baseInvoiceSchema.pick({ customerId: true, issueDate: true, dueDate: true }).refine(data => new Date(data.dueDate) >= new Date(data.issueDate), {
+                message: "Due date cannot be before the issue date.",
+                path: ["dueDate"],
+            });
             const result = step1Schema.safeParse(formData);
             if (!result.success) {
                 parseErrors(result.error.issues);
@@ -121,7 +124,7 @@ const CreateInvoiceForm: React.FC<CreateInvoiceFormProps> = ({ customers, onSave
             }
         }
         if (currentStep === 2) {
-             const step2Schema = createInvoiceSchema.pick({ items: true });
+             const step2Schema = baseInvoiceSchema.pick({ items: true });
              const result = step2Schema.safeParse(formData);
              if(!result.success){
                 parseErrors(result.error.issues);

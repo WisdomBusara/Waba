@@ -141,6 +141,7 @@ const App: React.FC = () => {
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}
             onLogout={handleLogout}
+            onNavigate={navigateTo}
           />
 
           <main className="flex-grow">
