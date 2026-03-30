@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GoogleGenAI, LiveServerMessage, Modality, Blob, LiveSession } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { MicIcon, StopCircleIcon, XIcon, LogoIcon } from './icons';
 
 // --- Audio Utility Functions ---
@@ -39,7 +39,7 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-function createBlob(data: Float32Array): Blob {
+function createBlob(data: Float32Array): { data: string; mimeType: string } {
   const l = data.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
@@ -66,7 +66,7 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose, showToast }) => 
   const [currentInput, setCurrentInput] = useState('');
   const [currentOutput, setCurrentOutput] = useState('');
 
-  const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
+  const sessionPromiseRef = useRef<Promise<any> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -133,7 +133,7 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose, showToast }) => 
                     const inputData = event.inputBuffer.getChannelData(0);
                     const pcmBlob = createBlob(inputData);
                     sessionPromiseRef.current?.then((session) => {
-                        session.sendRealtimeInput({ media: pcmBlob });
+                        session.sendRealtimeInput({ audio: pcmBlob });
                     });
                 };
                 

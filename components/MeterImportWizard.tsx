@@ -6,6 +6,7 @@ import Modal from './ui/Modal';
 interface MeterImportWizardProps {
     onComplete: (data: AddMeterFormData[]) => void;
     onCancel: () => void;
+    showToast: (message: string, type?: 'success' | 'error') => void;
 }
 
 type WizardStep = 'upload' | 'map' | 'confirm';
@@ -21,7 +22,7 @@ type ValidatedRow = {
 const REQUIRED_FIELDS: string[] = ['serialNumber', 'installationDate', 'initialReading'];
 const OPTIONAL_FIELDS: string[] = ['customerAccount'];
 
-const MeterImportWizard: React.FC<MeterImportWizardProps> = ({ onComplete, onCancel }) => {
+const MeterImportWizard: React.FC<MeterImportWizardProps> = ({ onComplete, onCancel, showToast }) => {
     const [step, setStep] = useState<WizardStep>('upload');
     const [file, setFile] = useState<File | null>(null);
     const [headers, setHeaders] = useState<string[]>([]);

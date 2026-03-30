@@ -138,7 +138,7 @@ const Users: React.FC<UsersProps> = ({ showToast }) => {
                                         <tr key={user.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${user.status === 'Inactive' ? 'opacity-60' : ''}`}>
                                             <td className="px-6 py-4 font-medium flex items-center gap-2 text-slate-900 dark:text-white">
                                                 <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs">
-                                                    {user.name.split(' ').map(n => n[0]).join('')}
+                                                    {(user.name || '').split(' ').map(n => n?.[0] || '').join('')}
                                                 </div>
                                                 {user.name}
                                             </td>

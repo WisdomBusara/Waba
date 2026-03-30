@@ -261,6 +261,7 @@ export function seedData() {
         { id: 'USR-1', name: 'Admin User', email: 'admin@waba.com', password: 'admin123', role: 'Admin', lastActive: new Date().toISOString() },
         { id: 'USR-2', name: 'James Kamau', email: 'james@splashdash.co.ke', password: 'admin123', role: 'Admin', lastActive: new Date().toISOString() },
         { id: 'USR-3', name: 'Sarah Wanjiku', email: 'sarah@splashdash.co.ke', password: 'admin123', role: 'Manager', lastActive: new Date().toISOString() },
+        { id: 'USR-4', name: 'John Doe', email: 'john@splashdash.co.ke', password: 'admin123', role: 'Agent', lastActive: new Date().toISOString() },
     ];
     const insertUser = db.prepare('INSERT INTO users (id, name, email, password, role, lastActive) VALUES (?, ?, ?, ?, ?, ?)');
     users.forEach(u => insertUser.run(u.id, u.name, u.email, u.password, u.role, u.lastActive));
@@ -280,5 +281,17 @@ db.transaction(() => {
     initializeDatabase();
     seedData();
 })();
+
+export function runBackup(): string {
+    const backupDir = path.join(__dirname, 'backups');
+    if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir);
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = path.join(backupDir, `database-${timestamp}.sqlite`);
+    
+    fs.copyFileSync(path.join(dbDir, 'database.sqlite'), backupPath);
+    return backupPath;
+}
 
 export default db;

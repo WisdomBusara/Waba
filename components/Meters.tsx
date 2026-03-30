@@ -149,7 +149,7 @@ const Meters: React.FC<MetersProps> = ({ showToast, initialMeterId }) => {
     }
     
     if (isImporting) {
-        return <MeterImportWizard onComplete={handleImportMeters} onCancel={() => setIsImporting(false)} />;
+        return <MeterImportWizard onComplete={handleImportMeters} onCancel={() => setIsImporting(false)} showToast={showToast} />;
     }
 
     return (

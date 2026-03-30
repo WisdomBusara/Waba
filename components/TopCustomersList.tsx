@@ -30,7 +30,7 @@ const TopCustomersList: React.FC<TopCustomersListProps> = ({ customers }) => {
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
                 <div
                   className="bg-primary rounded-full h-1.5"
-                  style={{ width: `${(customer.billed / totalBilled) * 100}%` }}
+                  style={{ width: `${totalBilled > 0 ? (customer.billed / totalBilled) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>

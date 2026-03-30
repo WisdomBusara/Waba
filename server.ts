@@ -6,6 +6,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import { Server } from 'socket.io';
+import morgan from 'morgan';
+import fs from 'fs';
 
 const db = (dbModule as any).default || dbModule;
 
@@ -21,12 +23,10 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  app.use((req, res, next) => {
-    import('fs').then(fs => {
-      fs.appendFileSync('server.log', `[REQ] ${req.method} ${req.url}\n`);
-    });
-    next();
-  });
+  // Setup morgan logger
+  const accessLogStream = fs.createWriteStream(path.join(__dirname, 'server.log'), { flags: 'a' });
+  app.use(morgan('combined', { stream: accessLogStream }));
+  app.use(morgan('dev')); // Also log to console for development
 
   const getDashboardData = () => {
     const totalBilled =
@@ -136,13 +136,13 @@ async function startServer() {
       kpiData: [
         {
           title: 'Total Billed (Month)',
-          value: \`KES \${Number(totalBilled).toLocaleString()}\`,
+          value: `KES ${Number(totalBilled).toLocaleString()}`,
           change: '+5.2%',
           changeType: 'increase',
         },
         {
           title: 'Total Collected (Month)',
-          value: \`KES \${Number(totalCollected).toLocaleString()}\`,
+          value: `KES ${Number(totalCollected).toLocaleString()}`,
           change: '+8.1%',
           changeType: 'increase',
         },
@@ -269,7 +269,6 @@ async function startServer() {
 
   // --- DASHBOARD ---
   app.get('/api/dashboard', (req, res) => {
-    import('fs').then(fs => fs.appendFileSync('server.log', `[ROUTE] /api/dashboard HIT\n`));
     try {
       res.json(getDashboardData());
     } catch (error: any) {
@@ -986,7 +985,7 @@ async function startServer() {
         'UPDATE users SET name = ?, email = ?, role = ?, status = ? WHERE id = ?'
       ).run(name, email, role, status, req.params.id);
       
-      logAudit(req, 'UPDATE', 'User', req.params.id, `Updated user ${name} (${email})`);
+      logAudit(req, 'UPDATE', 'User', req.params.id as string, `Updated user ${name} (${email})`);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: 'Update failed', error: err.message });
@@ -997,7 +996,7 @@ async function startServer() {
     try {
       const { status } = req.body;
       db.prepare("UPDATE users SET status = ? WHERE id = ?").run(status, req.params.id);
-      logAudit(req, status === 'Active' ? 'ACTIVATE' : 'DEACTIVATE', 'User', req.params.id, `${status === 'Active' ? 'Activated' : 'Deactivated'} user ${req.params.id}`);
+      logAudit(req, status === 'Active' ? 'ACTIVATE' : 'DEACTIVATE', 'User', req.params.id as string, `${status === 'Active' ? 'Activated' : 'Deactivated'} user ${req.params.id}`);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: 'Status update failed', error: err.message });
@@ -1007,7 +1006,7 @@ async function startServer() {
   app.delete('/api/users/:id', checkRole(['Admin']), (req, res) => {
     try {
       db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
-      logAudit(req, 'DELETE', 'User', req.params.id, `Deleted user ${req.params.id}`);
+      logAudit(req, 'DELETE', 'User', req.params.id as string, `Deleted user ${req.params.id}`);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: 'Deletion failed', error: err.message });
@@ -1072,7 +1071,6 @@ async function startServer() {
 
   // --- NOTIFICATIONS ---
   app.get('/api/notifications', (req, res) => {
-    import('fs').then(fs => fs.appendFileSync('server.log', `[ROUTE] /api/notifications HIT\n`));
     try {
       const userId = req.headers['x-user-id'] as string;
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
@@ -1210,7 +1208,7 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

@@ -46,6 +46,7 @@ const SortableHeader: React.FC<{
 
 const InvoiceTable: React.FC<InvoiceTableProps> = ({ invoices, onViewInvoice, onSort, sortConfig, onCreateInvoice }) => {
     const renderInvoiceId = (id: string) => {
+        if (!id) return '';
         const parts = id.split('-');
         if (parts.length === 3) {
             const prefix = `${parts[0]}-${parts[1]}-`;
