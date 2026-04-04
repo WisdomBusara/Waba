@@ -1,0 +1,2 @@
+677:        const insertItem = db.prepare('INSERT INTO invoice_items (invoiceId, description, quantity, unitPrice, total) VALUES (?, ?, ?, ?, ?)');
+716:        const insertItem = db.prepare('INSERT INTO invoice_items (invoiceId, description, quantity, unitPrice, total) VALUES (?, ?, ?, ?, ?)');

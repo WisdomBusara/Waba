@@ -105,6 +105,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen, activeVi
         links: [
             { icon: UsersIcon, label: 'Customers' },
             { icon: DropletIcon, label: 'Meters & Readings' },
+            { icon: FileTextIcon, label: 'Assets' },
             { 
                 label: 'Billing',
                 icon: FileTextIcon,

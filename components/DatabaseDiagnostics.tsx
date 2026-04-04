@@ -15,14 +15,16 @@ interface DbStats {
         invoices: number;
         payments: number;
         users: number;
+        assets: number;
     };
-    size: string;
+    fileSize: number;
     lastValidated: string;
 }
 
 const DatabaseDiagnostics: React.FC<{ showToast: (msg: string, type?: 'success' | 'error') => void }> = ({ showToast }) => {
     const [stats, setStats] = useState<DbStats | null>(null);
     const [isValidating, setIsValidating] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const runValidation = useCallback(async () => {
         setIsValidating(true);
@@ -44,6 +46,42 @@ const DatabaseDiagnostics: React.FC<{ showToast: (msg: string, type?: 'success' 
     useEffect(() => {
         runValidation();
     }, []);
+
+    const handleDownloadBackup = async () => {
+        setIsDownloading(true);
+        try {
+            const res = await fetch('/api/db/backup', {
+                headers: {
+                    'x-user-id': JSON.parse(localStorage.getItem('user') || '{}').id,
+                    'x-user-role': JSON.parse(localStorage.getItem('user') || '{}').role
+                }
+            });
+            if (!res.ok) throw new Error('Failed to download backup');
+            
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `database_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showToast('Backup downloaded successfully', 'success');
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    const formatBytes = (bytes: number) => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
 
     const StatItem = ({ label, count, icon: Icon }: any) => (
         <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md">
@@ -70,26 +108,36 @@ const DatabaseDiagnostics: React.FC<{ showToast: (msg: string, type?: 'success' 
                         </CardTitle>
                         <CardDescription>Monitor data integrity and record distribution across the system.</CardDescription>
                     </div>
-                    <Button 
-                        onClick={runValidation} 
-                        disabled={isValidating}
-                        variant={stats?.status === 'Corrupted' ? 'destructive' : 'outline'}
-                    >
-                        {isValidating ? (
-                            <>
-                                <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Analyzing...
-                            </>
-                        ) : (
-                            <>
-                                <ZapIcon className="w-4 h-4 mr-2" />
-                                Run Full Diagnostic
-                            </>
-                        )}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button 
+                            onClick={handleDownloadBackup} 
+                            disabled={isDownloading}
+                            variant="outline"
+                        >
+                            <DownloadIcon className="w-4 h-4 mr-2" />
+                            {isDownloading ? 'Downloading...' : 'Backup'}
+                        </Button>
+                        <Button 
+                            onClick={runValidation} 
+                            disabled={isValidating}
+                            variant={stats?.status === 'Corrupted' ? 'destructive' : 'default'}
+                        >
+                            {isValidating ? (
+                                <>
+                                    <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Analyzing...
+                                </>
+                            ) : (
+                                <>
+                                    <ZapIcon className="w-4 h-4 mr-2" />
+                                    Run Full Diagnostic
+                                </>
+                            )}
+                        </Button>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent className="p-6">
@@ -125,11 +173,11 @@ const DatabaseDiagnostics: React.FC<{ showToast: (msg: string, type?: 'success' 
                         <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-xl space-y-3">
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-500">Engine</span>
-                                <span className="font-mono font-bold">SQLite 3.x (B-Tree)</span>
+                                <span className="font-mono font-bold">PostgreSQL (Supabase)</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-500">File Size</span>
-                                <span className="font-mono font-bold">{stats?.size || '0 KB'}</span>
+                                <span className="font-mono font-bold">{stats?.fileSize !== undefined ? formatBytes(stats.fileSize) : 'Unknown'}</span>
                             </div>
                              <div className="flex justify-between text-sm">
                                 <span className="text-slate-500">Status Msg</span>
@@ -144,19 +192,20 @@ const DatabaseDiagnostics: React.FC<{ showToast: (msg: string, type?: 'success' 
                             <LayoutGridIcon className="w-4 h-4 text-slate-400" />
                             <h4 className="text-sm font-bold uppercase tracking-widest text-slate-500">Record Distribution</h4>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <StatItem label="Customers" count={stats?.tableCounts.customers} icon={ShieldCheckIcon} />
-                            <StatItem label="Meters" count={stats?.tableCounts.meters} icon={ActivityIcon} />
-                            <StatItem label="Readings" count={stats?.tableCounts.readings} icon={ZapIcon} />
-                            <StatItem label="Invoices" count={stats?.tableCounts.invoices} icon={DownloadIcon} />
-                            <StatItem label="Payments" count={stats?.tableCounts.payments} icon={ZapIcon} />
-                            <StatItem label="Staff Users" count={stats?.tableCounts.users} icon={ShieldCheckIcon} />
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <StatItem label="Customers" count={stats?.tableCounts?.customers} icon={ShieldCheckIcon} />
+                            <StatItem label="Meters" count={stats?.tableCounts?.meters} icon={ActivityIcon} />
+                            <StatItem label="Readings" count={stats?.tableCounts?.readings} icon={ZapIcon} />
+                            <StatItem label="Invoices" count={stats?.tableCounts?.invoices} icon={DownloadIcon} />
+                            <StatItem label="Payments" count={stats?.tableCounts?.payments} icon={ZapIcon} />
+                            <StatItem label="Staff Users" count={stats?.tableCounts?.users} icon={ShieldCheckIcon} />
+                            <StatItem label="Assets" count={stats?.tableCounts?.assets} icon={LayoutGridIcon} />
                         </div>
                         
                         <div className="mt-8 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl">
                             <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
                                 <AlertTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                                <span><b>Maintenance Tip:</b> If your database exceeds 1GB or record counts go above 100k, consider enabling Write-Ahead Logging (WAL) mode or transitioning to a cloud database like PostgreSQL for better concurrency.</span>
+                                <span><b>Maintenance Tip:</b> You are currently using a robust PostgreSQL database via Supabase. Regular backups are still recommended for disaster recovery.</span>
                             </p>
                         </div>
                     </div>
